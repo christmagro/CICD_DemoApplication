@@ -18,7 +18,7 @@ public class DemoApplication {
 
     @GetMapping("/hello")
     public String hello() {
-        log.info("Api hit on /hello");
+        log.info("Api hit on /hello, ok");
         return "Hello from the Ephemeral Environment! Environment: " + System.getenv("HOSTNAME");
     }
 
