@@ -90,13 +90,12 @@ spec:
                             } else {
                                 sh "mkdir -p features/${branch}"
                                 sh "cp templates/* features/${branch}/"
-                                sh """
-                                    sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/deployment.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/deployment.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/service.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/ingress.yaml
-                                    sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' features/${branch}/ingress.yaml
-                                """
+                                // Individual, simple sed commands (Avoids multi-line quote issues)
+                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/deployment.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/deployment.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/service.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/ingress.yaml"
+                                sh "sed -i 's|HOST_PLACEHOLDER|${HOST_URL}|g' features/${branch}/ingress.yaml"
                             }
 
                             // 3. Final Commit and Push
