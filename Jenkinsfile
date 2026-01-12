@@ -76,7 +76,7 @@ spec:
 
                         def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
-                        def branch = env.BRANCH_NAME.replaceAll("/", "-")
+                        def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
 
                         sh "rm -rf gitops-repo"
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
@@ -90,9 +90,9 @@ spec:
                                 sh "mkdir -p features/${branch}"
                                 sh "cp templates/* features/${branch}/"
 
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/*.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' features/${branch}/ingress.yaml"
+                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' 'features/${branch}'/*.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' 'features/${branch}'/*.yaml"
+                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}''/ingress.yaml"
                             }
 
                             sh "git config user.email 'jenkins@poc.com'"
