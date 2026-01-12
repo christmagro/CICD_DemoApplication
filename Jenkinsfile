@@ -65,51 +65,55 @@ spec:
         }
 
         stage('Update GitOps Repository') {
-            steps {
-                container('docker-cli') {
-                    script {
-                        // 1. Setup Variables and Sanitize Branch
-                        def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
-                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                    steps {
+                        container('docker-cli') {
+                            script {
+                                // 1. CALCULATE ALL VARIABLES AT THE TOP (Global Scope)
+                                def rawBranch = env.BRANCH_NAME
+                                def branchSanitized = rawBranch.toLowerCase().replaceAll("[^a-z0-9]", "-")
 
-                        // 2. Prepare GitOps Repo
-                        sh "git config --global --add safe.directory '*'"
-                        sh "rm -rf gitops-repo"
-                        sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
+                                def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                                def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
 
-                        dir('gitops-repo') {
-                            if (branch == 'main' || branch == 'master') {
-                                sh """
-                                    sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/deployment.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/service.yaml
-                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/ingress.yaml
-                                    sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml
-                                """
-                            } else {
-                                sh "mkdir -p features/${branch}"
-                                sh "cp templates/* features/${branch}/"
-                                // Individual, simple sed commands (Avoids multi-line quote issues)
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/deployment.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/deployment.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/service.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/ingress.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${HOST_URL}|g' features/${branch}/ingress.yaml"
+                                // Define specific hosts for each environment
+                                def PROD_HOST = "${APP_NAME}.localhost"
+                                def FEATURE_HOST = "${APP_NAME}-${branchSanitized}.localhost"
+
+                                // 2. Setup Git environment
+                                sh "git config --global --add safe.directory '*'"
+                                sh "rm -rf gitops-repo"
+                                sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
+
+                                dir('gitops-repo') {
+                                    if (branchSanitized == 'main' || branchSanitized == 'master') {
+                                        // --- PRODUCTION LOGIC ---
+                                        sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/deployment.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/service.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/ingress.yaml"
+                                        sh "sed -i 's|HOST_PLACEHOLDER|${PROD_HOST}|g' prod/ingress.yaml"
+                                    } else {
+                                        // --- FEATURE BRANCH LOGIC ---
+                                        sh "mkdir -p features/${branchSanitized}"
+                                        sh "cp templates/* features/${branchSanitized}/"
+
+                                        sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branchSanitized}/deployment.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/deployment.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/service.yaml"
+                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/ingress.yaml"
+                                        sh "sed -i 's|HOST_PLACEHOLDER|${FEATURE_HOST}|g' features/${branchSanitized}/ingress.yaml"
+                                    }
+
+                                    // 3. Final Commit and Push
+                                    sh "git config user.email 'jenkins@poc.com'"
+                                    sh "git config user.name 'Jenkins CI'"
+                                    sh "git add ."
+                                    sh "git commit -m 'Deploy ${branchSanitized} - ${TAG}' || echo 'No changes to commit'"
+                                    sh "git push origin main"
+                                }
                             }
-
-                            // 3. Final Commit and Push
-                            sh """
-                                git config user.email 'jenkins@poc.com'
-                                git config user.name 'Jenkins CI'
-                                git add .
-                                git commit -m 'Deploy ${branch} - ${TAG}' || echo "No changes to commit"
-                                git push origin main
-                            """
                         }
                     }
                 }
-            }
-        }
     }
 }
