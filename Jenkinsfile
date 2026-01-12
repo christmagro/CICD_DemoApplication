@@ -72,38 +72,45 @@ spec:
             steps {
                 container('docker-cli') {
                     script {
-                        sh "git config --global --add safe.directory '*'"
-
-                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                        // 1. Sanitize variables
                         def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
-
+                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:
+                        // 2. Setup Git
+                        sh "git config --global --add safe.directory '*'"
                         sh "rm -rf gitops-repo"
-                        sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
-
+                        sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitop
                         dir('gitops-repo') {
                             if (branch == 'main' || branch == 'master') {
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml"
+                                // Update Production
+                                sh """
+                                    sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml
+                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/*.yaml
+                                    sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml
+                                """
                             } else {
+                                // Update Ephemeral Feature Branch
                                 sh "mkdir -p features/${branch}"
-                                sh "cp templates/* features/${branch}/"
+                                sh "cp templates/* features/${br
+                                // We use a single 'sh' block for all replacements to avoid quote issues
+                                sh """
+                                    sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/*.yaml
+                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/*.yaml
+                                    sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' features/${branch}/ingress.yaml
+                                """
 
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' 'features/${branch}'/*.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' 'features/${branch}'/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}'/ingress.yaml"
-                            }
-
-                            sh "git config user.email 'jenkins@poc.com'"
-                            sh "git config user.name 'Jenkins CI'"
-                            sh "git add ."
-                            sh "git commit -m 'Deploy ${branch} - ${TAG}'"
-                            sh "git push origin main"
+                            // 3. Push back to GitHub
+                            sh """
+                                git config user.email 'jenkins@poc.com'
+                                git config user.name 'Jenkins CI'
+                                git add .
+                                git commit -m 'Deploy ${branch} - ${TAG}'
+                                git push origin main
+                            """
                         }
                     }
                 }
             }
-        }
+                }
     }
 }
