@@ -11,7 +11,7 @@ spec:
     command: ['cat']
     tty: true
   - name: docker-cli
-    image: docker:24.0.6
+    image: docker:24.0.6-git # Changed to -git version
     command: ['cat']
     env:
     - name: DOCKER_HOST
@@ -20,20 +20,19 @@ spec:
   - name: dind
     image: docker:24.0.6-dind
     securityContext:
-      privileged: true # Required for Docker-in-Docker
+      privileged: true
     env:
     - name: DOCKER_TLS_CERTDIR
-      value: "" # Disables TLS for simpler POC networking
+      value: ""
     tty: true
 """
         }
     }
 
     environment {
-        // !!! IMPORTANT: CHANGE THESE TO YOUR ACTUAL VALUES !!!
-        APP_NAME        = "spring-poc"
-        DOCKER_USER     = "your-docker-hub-user"
-        GITOPS_REPO     = "github.com/your-github-user/your-gitops-repo.git"
+        APP_NAME        = "app-demo-cicd-poc"
+        DOCKER_USER     = "christmagro@gmail.com"
+        GITOPS_REPO     = "https://github.com/christmagro/cicd_poc_argo_repo.git"
 
         DOCKER_CREDS    = credentials('docker-hub-creds')
         GITHUB_TOKEN    = credentials('github-token')
@@ -52,14 +51,13 @@ spec:
             steps {
                 container('docker-cli') {
                     script {
-                        // Fix the 'dubious ownership' git error
+                        // Git is now available in this container!
                         sh "git config --global --add safe.directory '*'"
 
                         def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
 
-                        // Wait a few seconds for the DinD sidecar to start up
-                        sh 'sleep 5'
+                        sh 'sleep 5' // Give DinD time to warm up
 
                         sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
                         sh "docker build -t ${FULL_IMAGE} ."
@@ -79,7 +77,7 @@ spec:
                         def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
                         def branch = env.BRANCH_NAME.replaceAll("/", "-")
 
-                        sh "rm -rf gitops-repo" // Clean up old clones
+                        sh "rm -rf gitops-repo"
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
 
                         dir('gitops-repo') {
