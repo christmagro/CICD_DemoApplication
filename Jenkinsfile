@@ -11,7 +11,7 @@ spec:
     command: ['cat']
     tty: true
   - name: docker-cli
-    image: docker:24.0.6-git # Changed to -git version
+    image: docker:24.0.6-git
     command: ['cat']
     env:
     - name: DOCKER_HOST
@@ -34,7 +34,6 @@ spec:
         APP_NAME        = "app-demo-cicd-poc"
         DOCKER_USER     = "christmagro"
         GITOPS_REPO     = "github.com/christmagro/cicd_poc_argo_repo.git"
-
         DOCKER_CREDS    = credentials('docker-hub-creds')
         GITHUB_TOKEN    = credentials('github-token')
     }
@@ -52,14 +51,11 @@ spec:
             steps {
                 container('docker-cli') {
                     script {
-                        // Git is now available in this container!
                         sh "git config --global --add safe.directory '*'"
-
                         def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
 
-                        sh 'sleep 5' // Give DinD time to warm up
-
+                        sh 'sleep 5'
                         sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
                         sh "docker build -t ${FULL_IMAGE} ."
                         sh "docker push ${FULL_IMAGE}"
@@ -72,34 +68,44 @@ spec:
             steps {
                 container('docker-cli') {
                     script {
-                        sh "git config --global --add safe.directory '*'"
-
+                        // 1. Setup Variables and Sanitize Branch
+                        def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
                         def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
-                        def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
 
+                        // 2. Prepare GitOps Repo
+                        sh "git config --global --add safe.directory '*'"
                         sh "rm -rf gitops-repo"
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
 
                         dir('gitops-repo') {
                             if (branch == 'main' || branch == 'master') {
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml"
+                                sh """
+                                    sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml
+                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/deployment.yaml
+                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/service.yaml
+                                    sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/ingress.yaml
+                                    sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml
+                                """
                             } else {
                                 sh "mkdir -p features/${branch}"
                                 sh "cp templates/* features/${branch}/"
-
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' 'features/${branch}'/*.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' 'features/${branch}'/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}''/ingress.yaml"
+                                // Individual, simple sed commands (Avoids multi-line quote issues)
+                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/deployment.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/deployment.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/service.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/ingress.yaml"
+                                sh "sed -i 's|HOST_PLACEHOLDER|${HOST_URL}|g' features/${branch}/ingress.yaml"
                             }
 
-                            sh "git config user.email 'jenkins@poc.com'"
-                            sh "git config user.name 'Jenkins CI'"
-                            sh "git add ."
-                            sh "git commit -m 'Deploy ${branch} - ${TAG}'"
-                            sh "git push origin main"
+                            // 3. Final Commit and Push
+                            sh """
+                                git config user.email 'jenkins@poc.com'
+                                git config user.name 'Jenkins CI'
+                                git add .
+                                git commit -m 'Deploy ${branch} - ${TAG}' || echo "No changes to commit"
+                                git push origin main
+                            """
                         }
                     }
                 }
