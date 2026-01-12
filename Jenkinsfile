@@ -92,7 +92,7 @@ spec:
 
                                 sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' 'features/${branch}'/*.yaml"
                                 sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' 'features/${branch}'/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}''/ingress.yaml"
+                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}'/ingress.yaml"
                             }
 
                             sh "git config user.email 'jenkins@poc.com'"
