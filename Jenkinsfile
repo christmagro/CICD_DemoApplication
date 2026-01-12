@@ -11,24 +11,30 @@ spec:
     command: ['cat']
     tty: true
   - name: docker-cli
-    image: docker:latest
+    image: docker:24.0.6-git # Changed to -git version
     command: ['cat']
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
     tty: true
-    volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
-  volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
+  - name: dind
+    image: docker:24.0.6-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    command: ["dockerd", "--host=tcp://localhost:2375", "--mtu=1400"]
+    tty: true
 """
         }
     }
 
     environment {
-        APP_NAME        = "spring-poc"
-        DOCKER_USER     = "your-dockerhub-username"
-        GITOPS_REPO     = "github.com/your-username/your-gitops-repo.git"
+        APP_NAME        = "app-demo-cicd-poc"
+        DOCKER_USER     = "christmagro"
+        GITOPS_REPO     = "github.com/christmagro/cicd_poc_argo_repo.git"
+
         DOCKER_CREDS    = credentials('docker-hub-creds')
         GITHUB_TOKEN    = credentials('github-token')
     }
@@ -46,8 +52,13 @@ spec:
             steps {
                 container('docker-cli') {
                     script {
-                        TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                        // Git is now available in this container!
+                        sh "git config --global --add safe.directory '*'"
+
+                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+
+                        sh 'sleep 5' // Give DinD time to warm up
 
                         sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
                         sh "docker build -t ${FULL_IMAGE} ."
@@ -59,35 +70,35 @@ spec:
 
         stage('Update GitOps Repository') {
             steps {
-                container('docker-cli') { // Any container with git works
+                container('docker-cli') {
                     script {
-                        def branch = env.BRANCH_NAME.replaceAll("/", "-") // Clean branch name
+                        sh "git config --global --add safe.directory '*'"
 
-                        // Clone GitOps repo
+                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                        def branch = env.BRANCH_NAME.toLowerCase().replaceAll("[^a-z0-9]", "-")
+
+                        sh "rm -rf gitops-repo"
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
 
                         dir('gitops-repo') {
-                            if (branch == 'main') {
-                                // Logic for Production
+                            if (branch == 'main' || branch == 'master') {
                                 sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
                                 sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/*.yaml"
                                 sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml"
                             } else {
-                                // Logic for Ephemeral Feature Branch
                                 sh "mkdir -p features/${branch}"
                                 sh "cp templates/* features/${branch}/"
 
-                                // Replace placeholders globally
-                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/*.yaml"
-                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/*.yaml"
-                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' features/${branch}/ingress.yaml"
+                                sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' 'features/${branch}'/*.yaml"
+                                sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' 'features/${branch}'/*.yaml"
+                                sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' 'features/${branch}''/ingress.yaml"
                             }
 
-                            // Commit and Push
-                            sh "git config user.email 'jenkins@example.com'"
+                            sh "git config user.email 'jenkins@poc.com'"
                             sh "git config user.name 'Jenkins CI'"
                             sh "git add ."
-                            sh "git commit -m 'Deploy ${APP_NAME} image ${TAG} to ${branch}'"
+                            sh "git commit -m 'Deploy ${branch} - ${TAG}'"
                             sh "git push origin main"
                         }
                     }
