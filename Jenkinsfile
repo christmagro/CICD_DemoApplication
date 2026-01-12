@@ -33,7 +33,7 @@ spec:
     environment {
         APP_NAME        = "app-demo-cicd-poc"
         DOCKER_USER     = "christmagro"
-        GITOPS_REPO     = "https://github.com/christmagro/cicd_poc_argo_repo.git"
+        GITOPS_REPO     = "github.com/christmagro/cicd_poc_argo_repo.git"
 
         DOCKER_CREDS    = credentials('docker-hub-creds')
         GITHUB_TOKEN    = credentials('github-token')
