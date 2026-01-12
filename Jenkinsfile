@@ -24,6 +24,7 @@ spec:
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
+    command: ["dockerd", "--host=tcp://localhost:2375", "--mtu=1400"]
     tty: true
 """
         }
