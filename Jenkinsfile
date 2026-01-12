@@ -43,25 +43,31 @@ spec:
         }
 
         stage('Build & Push Docker Image') {
-            steps {
-                container('docker-cli') {
-                    script {
-                        TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                    steps {
+                        container('docker-cli') {
+                            script {
+                                // FIX: Tell git this directory is safe
+                                sh "git config --global --add safe.directory '*'"
 
-                        sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
-                        sh "docker build -t ${FULL_IMAGE} ."
-                        sh "docker push ${FULL_IMAGE}"
+                                TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                                FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+
+                                sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
+                                sh "docker build -t ${FULL_IMAGE} ."
+                                sh "docker push ${FULL_IMAGE}"
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        stage('Update GitOps Repository') {
-            steps {
-                container('docker-cli') { // Any container with git works
-                    script {
-                        def branch = env.BRANCH_NAME.replaceAll("/", "-") // Clean branch name
+                stage('Update GitOps Repository') {
+                    steps {
+                        container('docker-cli') {
+                            script {
+                                // FIX: Tell git this directory is safe here too
+                                sh "git config --global --add safe.directory '*'"
+
+                                def branch = env.BRANCH_NAME.replaceAll("/", "-")
 
                         // Clone GitOps repo
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
