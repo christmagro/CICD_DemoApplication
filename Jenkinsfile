@@ -11,24 +11,30 @@ spec:
     command: ['cat']
     tty: true
   - name: docker-cli
-    image: docker:latest
+    image: docker:24.0.6
     command: ['cat']
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
     tty: true
-    volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
-  volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
+  - name: dind
+    image: docker:24.0.6-dind
+    securityContext:
+      privileged: true # Required for Docker-in-Docker
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: "" # Disables TLS for simpler POC networking
+    tty: true
 """
         }
     }
 
     environment {
+        // !!! IMPORTANT: CHANGE THESE TO YOUR ACTUAL VALUES !!!
         APP_NAME        = "spring-poc"
-        DOCKER_USER     = "your-dockerhub-username"
-        GITOPS_REPO     = "github.com/your-username/your-gitops-repo.git"
+        DOCKER_USER     = "your-docker-hub-user"
+        GITOPS_REPO     = "github.com/your-github-user/your-gitops-repo.git"
+
         DOCKER_CREDS    = credentials('docker-hub-creds')
         GITHUB_TOKEN    = credentials('github-token')
     }
@@ -43,57 +49,57 @@ spec:
         }
 
         stage('Build & Push Docker Image') {
-                    steps {
-                        container('docker-cli') {
-                            script {
-                                // FIX: Tell git this directory is safe
-                                sh "git config --global --add safe.directory '*'"
+            steps {
+                container('docker-cli') {
+                    script {
+                        // Fix the 'dubious ownership' git error
+                        sh "git config --global --add safe.directory '*'"
 
-                                TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                                FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
 
-                                sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
-                                sh "docker build -t ${FULL_IMAGE} ."
-                                sh "docker push ${FULL_IMAGE}"
-                            }
-                        }
+                        // Wait a few seconds for the DinD sidecar to start up
+                        sh 'sleep 5'
+
+                        sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
+                        sh "docker build -t ${FULL_IMAGE} ."
+                        sh "docker push ${FULL_IMAGE}"
                     }
                 }
+            }
+        }
 
-                stage('Update GitOps Repository') {
-                    steps {
-                        container('docker-cli') {
-                            script {
-                                // FIX: Tell git this directory is safe here too
-                                sh "git config --global --add safe.directory '*'"
+        stage('Update GitOps Repository') {
+            steps {
+                container('docker-cli') {
+                    script {
+                        sh "git config --global --add safe.directory '*'"
 
-                                def branch = env.BRANCH_NAME.replaceAll("/", "-")
+                        def TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def FULL_IMAGE = "${DOCKER_USER}/${APP_NAME}:${TAG}"
+                        def branch = env.BRANCH_NAME.replaceAll("/", "-")
 
-                        // Clone GitOps repo
+                        sh "rm -rf gitops-repo" // Clean up old clones
                         sh "git clone https://${GITHUB_TOKEN}@${GITOPS_REPO} gitops-repo"
 
                         dir('gitops-repo') {
-                            if (branch == 'main') {
-                                // Logic for Production
+                            if (branch == 'main' || branch == 'master') {
                                 sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
                                 sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/*.yaml"
                                 sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}.localhost|g' prod/ingress.yaml"
                             } else {
-                                // Logic for Ephemeral Feature Branch
                                 sh "mkdir -p features/${branch}"
                                 sh "cp templates/* features/${branch}/"
 
-                                // Replace placeholders globally
                                 sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branch}/*.yaml"
                                 sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branch}/*.yaml"
                                 sh "sed -i 's|HOST_PLACEHOLDER|${APP_NAME}-${branch}.localhost|g' features/${branch}/ingress.yaml"
                             }
 
-                            // Commit and Push
-                            sh "git config user.email 'jenkins@example.com'"
+                            sh "git config user.email 'jenkins@poc.com'"
                             sh "git config user.name 'Jenkins CI'"
                             sh "git add ."
-                            sh "git commit -m 'Deploy ${APP_NAME} image ${TAG} to ${branch}'"
+                            sh "git commit -m 'Deploy ${branch} - ${TAG}'"
                             sh "git push origin main"
                         }
                     }
