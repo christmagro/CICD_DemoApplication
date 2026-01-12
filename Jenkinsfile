@@ -88,9 +88,9 @@ spec:
                                     if (branchSanitized == 'main' || branchSanitized == 'master') {
                                         // --- PRODUCTION LOGIC ---
                                         sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' prod/deployment.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/deployment.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/service.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' prod/ingress.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' prod/deployment.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' prod/service.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' prod/ingress.yaml"
                                         sh "sed -i 's|HOST_PLACEHOLDER|${PROD_HOST}|g' prod/ingress.yaml"
                                     } else {
                                         // --- FEATURE BRANCH LOGIC ---
@@ -98,9 +98,9 @@ spec:
                                         sh "cp templates/* features/${branchSanitized}/"
 
                                         sh "sed -i 's|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g' features/${branchSanitized}/deployment.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/deployment.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/service.yaml"
-                                        sh "sed -i 's|APP_NAME_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/ingress.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/deployment.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/service.yaml"
+                                        sh "sed -i 's|APP_PLACEHOLDER|${APP_NAME}|g' features/${branchSanitized}/ingress.yaml"
                                         sh "sed -i 's|HOST_PLACEHOLDER|${FEATURE_HOST}|g' features/${branchSanitized}/ingress.yaml"
                                     }
 
